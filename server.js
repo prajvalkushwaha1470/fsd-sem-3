@@ -1,183 +1,116 @@
-const http = require("http");
-const fs = require("fs");
+const express = require("express");
 
+const app = express();
 const PORT = 3000;
 
-const server = http.createServer((req, res) => {
+app.use(express.json());
 
-    // Home page
-    if (req.method === "GET" && req.url === "/") {
+// 100 products
+let products = Array.from({ length: 100 }, (_, i) => ({
+    id: i + 1,
+    name: `Product ${i + 1}`,
+    price: (i + 1) * 100,
+    category: ["Electronics", "Clothing", "Books", "Home"][i % 4],
+    inStock: true
+}));
 
-        res.writeHead(200, { "Content-Type": "text/html" });
-
-        res.end(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Student Records</title>
-            </head>
-
-            <body>
-                <h1>Welcome to Student Record System</h1>
-
-                <h2>Add Student</h2>
-
-                <form method="POST" action="/add">
-
-                    <label>Student Name:</label>
-                    <input type="text" name="name" required>
-                    <br><br>
-
-                    <label>Roll Number:</label>
-                    <input type="text" name="roll" required>
-                    <br><br>
-
-                    <label>Course:</label>
-                    <input type="text" name="course" required>
-                    <br><br>
-
-                    <label>Email:</label>
-                    <input type="email" name="email" required>
-                    <br><br>
-
-                    <button type="submit">Add Student</button>
-
-                </form>
-
-                <br>
-
-                <a href="/students">View Student Records</a>
-            </body>
-            </html>
-        `);
-    }
-
-    // Add student
-    else if (req.method === "POST" && req.url === "/add") {
-
-        let body = "";
-
-        req.on("data", chunk => {
-            body += chunk.toString();
-        });
-
-        req.on("end", () => {
-
-            const params = new URLSearchParams(body);
-
-            const student = {
-                name: params.get("name"),
-                roll: params.get("roll"),
-                course: params.get("course"),
-                email: params.get("email")
-            };
-
-            fs.readFile("students.json", "utf8", (err, data) => {
-
-                let students = [];
-
-                if (!err && data) {
-                    students = JSON.parse(data);
-                }
-
-                students.push(student);
-
-                fs.writeFile(
-                    "students.json",
-                    JSON.stringify(students, null, 2),
-                    err => {
-
-                        if (err) {
-                            res.writeHead(500, {
-                                "Content-Type": "text/html"
-                            });
-
-                            res.end("<h1>Error saving student</h1>");
-                            return;
-                        }
-
-                        res.writeHead(302, {
-                            Location: "/students"
-                        });
-
-                        res.end();
-                    }
-                );
-            });
-        });
-    }
-
-    // Display students
-    else if (req.method === "GET" && req.url === "/students") {
-
-        fs.readFile("students.json", "utf8", (err, data) => {
-
-            let students = [];
-
-            if (!err && data) {
-                students = JSON.parse(data);
-            }
-
-            res.writeHead(200, {
-                "Content-Type": "text/html"
-            });
-
-            let html = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Student Records</title>
-                </head>
-
-                <body>
-
-                <h1>Student Records</h1>
-
-                <table border="1" cellpadding="10">
-                    <tr>
-                        <th>Name</th>
-                        <th>Roll Number</th>
-                        <th>Course</th>
-                        <th>Email</th>
-                    </tr>
-            `;
-
-            students.forEach(student => {
-                html += `
-                    <tr>
-                        <td>${student.name}</td>
-                        <td>${student.roll}</td>
-                        <td>${student.course}</td>
-                        <td>${student.email}</td>
-                    </tr>
-                `;
-            });
-
-            html += `
-                </table>
-
-                <br>
-
-                <a href="/">Add Another Student</a>
-
-                </body>
-                </html>
-            `;
-
-            res.end(html);
-        });
-    }
-
-    // Invalid route
-    else {
-        res.writeHead(404, {
-            "Content-Type": "text/html"
-        });
-
-        res.end("<h1>404 - Page Not Found</h1>");
-    }
+// Welcome route
+app.get("/", (req, res) => {
+    res.send("Welcome to the Product REST API");
 });
 
-server.listen(PORT, () => {
+// Get all products
+app.get("/products", (req, res) => {
+    res.json({
+        total: products.length,
+        products
+    });
+});
+
+// Get product by ID
+app.get("/products/:id", (req, res) => {
+    const product = products.find(
+        p => p.id === Number(req.params.id)
+    );
+
+    if (!product) {
+        return res.status(404).json({
+            message: "Product not found"
+        });
+    }
+
+    res.json(product);
+});
+
+// Add a product
+app.post("/products", (req, res) => {
+    const { name, price, category } = req.body;
+
+    if (!name || typeof price !== "number" ||
+        price < 0 || !category) {
+        return res.status(400).json({
+            message: "Name, valid price and category are required"
+        });
+    }
+
+    const newProduct = {
+        id: products.length
+            ? Math.max(...products.map(p => p.id)) + 1
+            : 1,
+        name,
+        price,
+        category,
+        inStock: true
+    };
+
+    products.push(newProduct);
+
+    res.status(201).json(newProduct);
+});
+
+// Update a product
+app.put("/products/:id", (req, res) => {
+    const product = products.find(
+        p => p.id === Number(req.params.id)
+    );
+
+    if (!product) {
+        return res.status(404).json({
+            message: "Product not found"
+        });
+    }
+
+    const { name, price, category, inStock } = req.body;
+
+    if (name !== undefined) product.name = name;
+    if (price !== undefined) product.price = price;
+    if (category !== undefined) product.category = category;
+    if (inStock !== undefined) product.inStock = inStock;
+
+    res.json(product);
+});
+
+// Delete a product
+app.delete("/products/:id", (req, res) => {
+    const index = products.findIndex(
+        p => p.id === Number(req.params.id)
+    );
+
+    if (index === -1) {
+        return res.status(404).json({
+            message: "Product not found"
+        });
+    }
+
+    const deletedProduct = products.splice(index, 1)[0];
+
+    res.json({
+        message: "Product deleted successfully",
+        product: deletedProduct
+    });
+});
+
+// Start server
+app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
 });
